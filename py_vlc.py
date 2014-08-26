@@ -1,26 +1,54 @@
 #! /usr/bin/python
 # -*- coding: utf-8 -*-
 
-# import external libraries
-#import wx # 2.8
 import vlc
 import time
 import serial
-
-# import standard libraries
-#import os
-#import user
+import threading
+import Queue
 
 
-class Player():
-    """The main window has to deal with events.
-    """
-    def __init__(self):
+class SerialPlayer():
+    def __init__(self, queue):
+        self.ser = serial.Serial()
+        self.ser.port = "/dev/ttyACM0"
+        self.ser.baudrate = 9600
+        self.queue = queue
+        self.receiver_thread = 0
         # VLC player controls
         self.Instance = vlc.Instance()
         self.player = self.Instance.media_player_new()
+        self.Media = False
 
-    def onplay(self, filename):
+    def start_reader(self):
+        try:
+            self.ser.open()
+        except Exception, e:
+            print "error open serial port: " + str(e)
+            exit()
+        if self.ser.isOpen():
+            print "serial port open"
+            self.ser.flushInput()  # flush input buffer, discarding all its contents
+            self.ser.flushOutput()  # flush output buffer, aborting current
+            time.sleep(0.5)  # give the serial port sometime to receive the data
+            self.receiver_thread = threading.Thread(target=self.reader)
+            self.receiver_thread.setDaemon(True)
+            self.receiver_thread.start()
+        else:
+            print "cannot open serial port "
+
+    def reader(self):
+        while True:
+            response = self.ser.readline()
+            # print("read data: " + response)
+            if response[:5] == "start":
+                #print "start"
+                queue.put("start")
+            if response[:3] == "end":
+                #print "end"
+                queue.put("end")
+
+    def play(self, filename):
         self.Media = self.Instance.media_new(filename)
         self.player.set_media(self.Media)
         self.player.play()
@@ -28,28 +56,76 @@ class Player():
         #print(self.player.get_fullscreen())
         #self.player.toggle_fullscreen()
 
-    def onpause(self):
-        """Pause the player.
-        """
+    def pause(self):
         self.player.pause()
 
-    def onstop(self):
-        """Stop the player.
-        """
+    def stop(self):
         self.player.stop()
 
 
 if __name__ == "__main__":
-    # player = Player()
-    # # show the player window centred and run the application
-    # player.onplay("/home/creosot/Downloads/Oculus.avi")
-    # time.sleep(10)
-    # player.onplay("/home/creosot/Downloads/morpehi2014.avi")
-    # time.sleep(10)
-    ser = serial.Serial()
-    ser.port = "/dev/tty20"
-    ser.open()
-    print ser.isOpen()
+    cur_rolik = ""
+    queue = Queue.Queue()
+    ser_play = SerialPlayer(queue)
+    ser_play.start_reader()
+
+    while True:
+        if not queue.empty():
+            res = queue.get_nowait()
+            if cur_rolik != res:
+                cur_rolik = res
+                if res == "start":
+                    print "start"
+                    ser_play.play("/home/creosot/Downloads/v1.avi")
+                if res == "end":
+                    print "end"
+                    ser_play.play("/home/creosot/Downloads/v2.avi")
+        time.sleep(1)
+
+
+
+
+
+    # while True:
+    #     try:
+    #         rolik = queue.get_nowait()
+    #         print rolik
+    #     except queue.empty():
+    #         print "empty"
+
+    # ser = serial.Serial()
+    # ser.port = "/dev/ttyACM0"
+    # ser.baudrate = 9600
+    # try:
+    #     ser.open()
+    # except Exception, e:
+    #     print "error open serial port: " + str(e)
+    #     exit()
+    # if ser.isOpen():
+    #     try:
+    #         ser.flushInput()  # flush input buffer, discarding all its contents
+    #         ser.flushOutput()  # flush output buffer, aborting current output
+    #         #ser.write("AT+CSQ")
+    #         time.sleep(0.5)  # give the serial port sometime to receive the data
+    #         numOfLines = 0
+    #         while True:
+    #             response = ser.readline()
+    #             # print("read data: " + response)
+    #             if response[:5] == "start":
+    #                 print "start"
+    #             if response[:3] == "end":
+    #                 print "end"
+    #             numOfLines += 1
+    #             if numOfLines >= 5:
+    #                 break
+    #         ser.close()
+    #     except Exception, e1:
+    #         print "error communicating...: " + str(e1)
+    # else:
+    #     print "cannot open serial port "
+
+
+
     #ser.port = "/dev/ttyUSB0"
     # ser.port = "/dev/ttyS2"
     # ser.baudrate = 9600
